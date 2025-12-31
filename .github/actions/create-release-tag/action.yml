@@ -1,0 +1,77 @@
+name: "Create Release Tag"
+description: "Determine version, check if tag exists, create if needed, output tag for notification"
+inputs:
+  version:
+    description: "Optional semver to release (e.g. 1.2.3). If omitted, topmost version in CHANGELOG.md is used."
+    required: false
+    default: ""
+outputs:
+  tag:
+    description: "The tag to notify about (v*.*.*)."
+    value: ${{ steps.determine.outputs.tag }}
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: "1.25.5"
+
+    - name: Determine version and tag
+      id: determine
+      run: |
+        set -euo pipefail
+        provided_version="${{ inputs.version }}"
+        if [ -n "$provided_version" ]; then
+          semver="$provided_version"
+          echo "Using provided version: $semver"
+        else
+          ver_line=$(grep -E '^## \[v?[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | head -n1 || true)
+          if [ -z "$ver_line" ]; then
+            echo "Error: No version found in CHANGELOG.md";
+            exit 1;
+          fi
+          semver=$(echo "$ver_line" | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')
+        fi
+        if [ -z "${semver:-}" ]; then
+          echo "Error: Could not determine semver.";
+          exit 1;
+        fi
+        tag="v$semver"
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      shell: bash
+
+    - name: Check tag existence and create if needed
+      env:
+        TAG: ${{ steps.determine.outputs.tag }}
+        DRY_RUN: ${{ env.DRY_RUN }}
+      run: |
+        set -euo pipefail
+        git fetch --tags
+        MODULE_PATH=$(go list -m)
+
+        # Check if tag exists locally
+        if git rev-parse "$TAG" > /dev/null 2>&1; then
+          echo "Tag $TAG already exists locally."
+          exit 0
+        fi
+
+        # Check if version already published to Go proxy
+        if curl -fS "https://proxy.golang.org/${MODULE_PATH}/@v/${TAG}.info" > /dev/null 2>&1; then
+          echo "Version $TAG already published to proxy."
+          exit 0
+        fi
+
+        # Tag doesn't exist, create it (unless dry_run)
+        dry_run="${DRY_RUN:-false}"
+        if [ "$dry_run" = "true" ] || [ "$dry_run" = "True" ]; then
+          echo "Dry run enabled — would create tag: $TAG"
+          exit 0
+        fi
+
+        echo "Creating and pushing tag: $TAG"
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git tag -a "$TAG" -m "Release $TAG"
+        git push origin "$TAG"
+      shell: bash
