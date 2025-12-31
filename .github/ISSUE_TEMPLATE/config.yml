@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report Security Vulnerability (Private & Preferred)
+    url: https://github.com/vihuvac/go-openapi-validator/security/advisories/new
+    about: Use this for security issues — reports are private and go directly to maintainers.
+  - name: Ask a Question or Discuss
+    url: https://github.com/vihuvac/go-openapi-validator/discussions
+    about: For questions or discussions (enable Discussions in Settings first).

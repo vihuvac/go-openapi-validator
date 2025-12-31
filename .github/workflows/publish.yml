@@ -1,0 +1,140 @@
+name: Publish to pkg.go.dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Optional semver to release (e.g. 1.2.3). If omitted, topmost version in CHANGELOG.md is used."
+        required: false
+      dry_run:
+        description: "If true, run checks but do not create or push the tag."
+        required: false
+        default: "false"
+  workflow_run:
+    workflows:
+      - "Go Test & Coverage"
+    types:
+      - completed
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare_release:
+    name: Create tag from CHANGELOG
+    if: "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'"
+    environment:
+      name: "release"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Ensure CHANGELOG.md changed in merge commit
+        id: changelog_check
+        run: |
+          set -euo pipefail
+          SHA='${{ github.event.workflow_run.head_sha }}'
+          echo "Checking commit $SHA for CHANGELOG.md changes"
+          if git show --name-only --pretty="" "$SHA" | grep -qx "CHANGELOG.md"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "CHANGELOG.md not changed in this merge. Skipping release.";
+            exit 0
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.25.5"
+
+      - name: Determine version
+        id: ver
+        run: |
+          set -euo pipefail
+          # Prefer manual input when provided via workflow_dispatch
+          if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ]; then
+            provided_version="${{ github.event.inputs.version }}"
+            if [ -n "$provided_version" ]; then
+              semver="$provided_version"
+              echo "Using provided version: $semver"
+            else
+              # fall back to CHANGELOG parsing
+              ver_line=$(grep -E '^## \[v?[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | head -n1 || true)
+              if [ -z "$ver_line" ]; then
+                echo "No version found in CHANGELOG.md";
+                echo "skip=true" >> "$GITHUB_OUTPUT";
+                exit 0;
+              fi
+              semver=$(echo "$ver_line" | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')
+            fi
+          else
+            # Normal automated path: parse topmost CHANGELOG entry
+            ver_line=$(grep -E '^## \[v?[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | head -n1 || true)
+            if [ -z "$ver_line" ]; then
+              echo "No version found in CHANGELOG.md";
+              echo "skip=true" >> "$GITHUB_OUTPUT";
+              exit 0;
+            fi
+            semver=$(echo "$ver_line" | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')
+          fi
+          if [ -z "${semver:-}" ]; then
+            echo "Could not determine semver.";
+            echo "skip=true" >> "$GITHUB_OUTPUT";
+            exit 0;
+          fi
+          new_tag="v$semver"
+          echo "version=$semver" >> "$GITHUB_OUTPUT"
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag if new
+        if: steps.ver.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          git fetch --tags
+          latest_tag=$(git tag --sort=-v:refname | head -n1 || true)
+          echo "Latest tag: $latest_tag"
+          new_tag="${{ steps.ver.outputs.new_tag }}"
+          MODULE_PATH=$(go list -m)
+          # Check if version already published to Go proxy
+          if curl -fS "https://proxy.golang.org/${MODULE_PATH}/@v/${new_tag}.info" > /dev/null 2>&1; then
+            echo "Version ${new_tag} already published to proxy. Nothing to do.";
+            exit 0;
+          fi
+          if [ "$new_tag" = "$latest_tag" ]; then
+            echo "Tag $new_tag already exists locally. Nothing to do.";
+            exit 0;
+          fi
+          dry_run_input="${{ github.event.inputs.dry_run }}"
+          if [ "${dry_run_input:-false}" = "true" ] || [ "${dry_run_input:-false}" = "True" ]; then
+            echo "Dry run enabled — would create and push tag: $new_tag"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$new_tag" -m "Release $new_tag"
+          git push origin "$new_tag"
+
+  publish:
+    name: Notify Go Proxy
+    if: "startsWith(github.ref, 'refs/tags/v')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Notify Go Proxy
+        env:
+          GITHUB_REF: ${{ github.ref }}
+        run: |
+          MODULE_PATH=$(go list -m)
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "Publishing $MODULE_PATH@$TAG"
+          curl -fSLo /dev/null https://proxy.golang.org/$MODULE_PATH/@v/$TAG.info || true

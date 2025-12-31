@@ -6,7 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.0.0] - 2025-12-30
+## [1.0.0] - 2025-12-31
 
 **Initial release of Go OpenAPI Validator** – a high-performance, framework-agnostic OpenAPI v3 validator for Go.
 
@@ -21,3 +21,4 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Zero Testing Dependencies**: Comprehensive test suite implemented using only the Go standard library for a lean and reliable codebase.
 - **Interactive Documentation**: Accessible and zero-config API documentation served at `/docs` (configurable).
 - **Multi-Framework Examples**: Detailed integration examples for standard library, Gorilla Mux, and Gin.
+- **Repository tooling**: Added issue templates and GitHub workflows (CI, release/publish).

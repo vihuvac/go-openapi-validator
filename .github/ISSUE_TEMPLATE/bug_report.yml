@@ -1,0 +1,46 @@
+name: Bug Report
+description: Report a bug in Go OpenAPI Validator
+title: "[BUG] "
+labels: ["bug", "triage"]
+body:
+  - type: textarea
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: version
+    attributes:
+      label: Affected version
+      description: What version of the boilerplate are you running?
+      options:
+        - 1.0.0 (Default)
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      description: Steps to reproduce the behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+
+  - type: textarea
+    attributes:
+      label: Actual behavior
+      description: What actually happened?
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: shell
