@@ -1,0 +1,27 @@
+*,
+*:before,
+*:after {
+  box-sizing: inherit;
+}
+
+html {
+  box-sizing: border-box;
+  overflow: -moz-scrollbars-vertical;
+  overflow-y: scroll;
+}
+
+body {
+  margin: 0;
+}
+
+.swagger-validator {
+  max-width: 91.25rem;
+  margin: 0 auto;
+}
+
+.swagger-validator__wrapper {
+  display: flex;
+  padding: 0 1.25rem;
+  justify-content: end;
+  align-items: center;
+}
