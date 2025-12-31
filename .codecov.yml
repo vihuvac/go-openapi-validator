@@ -1,0 +1,6 @@
+ignore:
+  - "examples/**"
+
+coverage:
+  precision: 2
+  round: nearest
