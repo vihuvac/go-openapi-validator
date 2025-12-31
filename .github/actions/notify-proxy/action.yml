@@ -1,0 +1,20 @@
+name: Notify Go Proxy
+description: Notify proxy.golang.org about a module version tag
+inputs:
+  tag:
+    description: 'The semver tag to notify (e.g. v1.2.3)'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: Notify Go Proxy
+      shell: bash
+      run: |
+        TAG="${{ inputs.tag }}"
+        if [ -z "$TAG" ]; then
+          echo "No tag to notify about"
+          exit 0
+        fi
+        MODULE_PATH=$(echo 'github.com/vihuvac/go-openapi-validator' || true)
+        echo "Notifying proxy about $MODULE_PATH@$TAG"
+        curl -fSLo /dev/null "https://proxy.golang.org/$MODULE_PATH/@v/$TAG.info" || true

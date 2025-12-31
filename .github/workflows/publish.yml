@@ -72,19 +72,34 @@ jobs:
         env:
           DRY_RUN: ${{ github.event.inputs.dry_run }}
 
-  publish:
-    name: Notify Go Proxy
-    if: "(needs.prepare_release.outputs.tag != '') || (needs.manual_release.outputs.tag != '')"
-    needs: [prepare_release, manual_release]
+  publish_after_prepare:
+    name: Notify Go Proxy (automated)
+    if: "needs.prepare_release.outputs.tag != ''"
+    needs: [prepare_release]
     runs-on: ubuntu-latest
     steps:
       - name: Notify Go Proxy
-        run: |
-          TAG="${{ needs.prepare_release.outputs.tag || needs.manual_release.outputs.tag }}"
-          if [ -z "$TAG" ]; then
-            echo "No tag to notify about"
-            exit 0
-          fi
-          MODULE_PATH=$(echo 'github.com/vihuvac/go-openapi-validator' || true)
-          echo "Notifying proxy about $MODULE_PATH@$TAG"
-          curl -fSLo /dev/null "https://proxy.golang.org/$MODULE_PATH/@v/$TAG.info" || true
+        uses: ./.github/actions/notify-proxy
+        with:
+          tag: ${{ needs.prepare_release.outputs.tag }}
+
+  publish_after_manual:
+    name: Notify Go Proxy (manual)
+    if: "needs.manual_release.outputs.tag != ''"
+    needs: [manual_release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Go Proxy
+        uses: ./.github/actions/notify-proxy
+        with:
+          tag: ${{ needs.manual_release.outputs.tag }}
+
+  publish_on_push:
+    name: Notify Go Proxy (tag push)
+    if: "github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Go Proxy
+        uses: ./.github/actions/notify-proxy
+        with:
+          tag: ${{ github.ref_name }}
