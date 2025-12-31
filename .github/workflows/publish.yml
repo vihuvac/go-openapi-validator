@@ -24,11 +24,11 @@ permissions:
 
 jobs:
   prepare_release:
-    name: Create tag from CHANGELOG
+    name: Prepare release (automated)
     if: "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'"
     runs-on: ubuntu-latest
     outputs:
-      tag_created: ${{ steps.tag_check.outputs.created }}
+      tag: ${{ steps.create.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,25 +37,18 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Ensure CHANGELOG.md changed in merge commit
-        id: changelog_check
         run: |
           set -euo pipefail
           SHA='${{ github.event.workflow_run.head_sha }}'
           echo "Checking commit $SHA for CHANGELOG.md changes"
-          if git show --name-only --pretty="" "$SHA" | grep -qx "CHANGELOG.md"; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+          if ! git show --name-only --pretty="" "$SHA" | grep -qx "CHANGELOG.md"; then
             echo "CHANGELOG.md not changed in this merge. Skipping release.";
-            exit 0
+            exit 1
           fi
 
       - name: Create release tag
+        id: create
         uses: ./.github/actions/create-release-tag
-
-      - name: Check if tag was created
-        id: tag_check
-        run: echo "created=true" >> "$GITHUB_OUTPUT"
 
   manual_release:
     name: Manual release (requires approval)
@@ -64,7 +57,7 @@ jobs:
       name: "release"
     runs-on: ubuntu-latest
     outputs:
-      tag_created: ${{ steps.tag_check.outputs.created }}
+      tag: ${{ steps.create.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -72,37 +65,26 @@ jobs:
           fetch-depth: 0
 
       - name: Create release tag
+        id: create
         uses: ./.github/actions/create-release-tag
         with:
           version: ${{ github.event.inputs.version }}
         env:
           DRY_RUN: ${{ github.event.inputs.dry_run }}
 
-      - name: Check if tag was created
-        id: tag_check
-        run: |
-          # Tag is created unless dry_run=true or error occurred
-          dry_run="${{ github.event.inputs.dry_run }}"
-          if [ "${dry_run:-false}" = "true" ] || [ "${dry_run:-false}" = "True" ]; then
-            echo "created=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "created=true" >> "$GITHUB_OUTPUT"
-          fi
-
   publish:
     name: Notify Go Proxy
-    if: "(needs.prepare_release.outputs.tag_created == 'true') || (needs.manual_release.outputs.tag_created == 'true')"
+    if: "(needs.prepare_release.outputs.tag != '') || (needs.manual_release.outputs.tag != '')"
     needs: [prepare_release, manual_release]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Notify Go Proxy
-        env:
-          GITHUB_REF: ${{ github.ref }}
         run: |
-          MODULE_PATH=$(go list -m)
-          TAG=${GITHUB_REF#refs/tags/}
-          echo "Publishing $MODULE_PATH@$TAG"
-          curl -fSLo /dev/null https://proxy.golang.org/$MODULE_PATH/@v/$TAG.info || true
+          TAG="${{ needs.prepare_release.outputs.tag || needs.manual_release.outputs.tag }}"
+          if [ -z "$TAG" ]; then
+            echo "No tag to notify about"
+            exit 0
+          fi
+          MODULE_PATH=$(echo 'github.com/vihuvac/go-openapi-validator' || true)
+          echo "Notifying proxy about $MODULE_PATH@$TAG"
+          curl -fSLo /dev/null "https://proxy.golang.org/$MODULE_PATH/@v/$TAG.info" || true

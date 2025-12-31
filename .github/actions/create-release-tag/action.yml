@@ -1,10 +1,14 @@
 name: "Create Release Tag"
-description: "Determine version from input or CHANGELOG.md and create/push Git tag"
+description: "Determine version, check if tag exists, create if needed, output tag for notification"
 inputs:
   version:
     description: "Optional semver to release (e.g. 1.2.3). If omitted, topmost version in CHANGELOG.md is used."
     required: false
     default: ""
+outputs:
+  tag:
+    description: "The tag to notify about (v*.*.*)."
+    value: ${{ steps.determine.outputs.tag }}
 runs:
   using: "composite"
   steps:
@@ -13,8 +17,8 @@ runs:
       with:
         go-version: "1.25.5"
 
-    - name: Determine version
-      id: ver
+    - name: Determine version and tag
+      id: determine
       run: |
         set -euo pipefail
         provided_version="${{ inputs.version }}"
@@ -24,47 +28,50 @@ runs:
         else
           ver_line=$(grep -E '^## \[v?[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | head -n1 || true)
           if [ -z "$ver_line" ]; then
-            echo "No version found in CHANGELOG.md";
-            echo "skip=true" >> "$GITHUB_OUTPUT";
-            exit 0;
+            echo "Error: No version found in CHANGELOG.md";
+            exit 1;
           fi
           semver=$(echo "$ver_line" | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')
         fi
         if [ -z "${semver:-}" ]; then
-          echo "Could not determine semver.";
-          echo "skip=true" >> "$GITHUB_OUTPUT";
-          exit 0;
+          echo "Error: Could not determine semver.";
+          exit 1;
         fi
-        new_tag="v$semver"
-        echo "version=$semver" >> "$GITHUB_OUTPUT"
-        echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+        tag="v$semver"
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
       shell: bash
 
-    - name: Create and push tag if new
-      if: steps.ver.outputs.skip != 'true'
+    - name: Check tag existence and create if needed
+      env:
+        TAG: ${{ steps.determine.outputs.tag }}
+        DRY_RUN: ${{ env.DRY_RUN }}
       run: |
         set -euo pipefail
         git fetch --tags
-        latest_tag=$(git tag --sort=-v:refname | head -n1 || true)
-        echo "Latest tag: $latest_tag"
-        new_tag="${{ steps.ver.outputs.new_tag }}"
         MODULE_PATH=$(go list -m)
-        # Check if version already published to Go proxy
-        if curl -fS "https://proxy.golang.org/${MODULE_PATH}/@v/${new_tag}.info" > /dev/null 2>&1; then
-          echo "Version ${new_tag} already published to proxy. Nothing to do.";
-          exit 0;
-        fi
-        if [ "$new_tag" = "$latest_tag" ]; then
-          echo "Tag $new_tag already exists locally. Nothing to do.";
-          exit 0;
-        fi
-        dry_run_input="${{ env.DRY_RUN }}"
-        if [ "${dry_run_input:-false}" = "true" ] || [ "${dry_run_input:-false}" = "True" ]; then
-          echo "Dry run enabled — would create and push tag: $new_tag"
+
+        # Check if tag exists locally
+        if git rev-parse "$TAG" > /dev/null 2>&1; then
+          echo "Tag $TAG already exists locally."
           exit 0
         fi
+
+        # Check if version already published to Go proxy
+        if curl -fS "https://proxy.golang.org/${MODULE_PATH}/@v/${TAG}.info" > /dev/null 2>&1; then
+          echo "Version $TAG already published to proxy."
+          exit 0
+        fi
+
+        # Tag doesn't exist, create it (unless dry_run)
+        dry_run="${DRY_RUN:-false}"
+        if [ "$dry_run" = "true" ] || [ "$dry_run" = "True" ]; then
+          echo "Dry run enabled — would create tag: $TAG"
+          exit 0
+        fi
+
+        echo "Creating and pushing tag: $TAG"
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git tag -a "$new_tag" -m "Release $new_tag"
-        git push origin "$new_tag"
+        git tag -a "$TAG" -m "Release $TAG"
+        git push origin "$TAG"
       shell: bash
