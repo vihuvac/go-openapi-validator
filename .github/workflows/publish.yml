@@ -78,6 +78,11 @@ jobs:
     needs: [prepare_release]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Notify Go Proxy
         uses: ./.github/actions/notify-proxy
         with:
@@ -89,6 +94,11 @@ jobs:
     needs: [manual_release]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Notify Go Proxy
         uses: ./.github/actions/notify-proxy
         with:
@@ -99,6 +109,11 @@ jobs:
     if: "github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')"
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Notify Go Proxy
         uses: ./.github/actions/notify-proxy
         with:
