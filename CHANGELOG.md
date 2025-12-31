@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.1] - 2025-12-31
+
+There is not a specific ticket for these changes.
+
+### Changed
+
+- Adjusted the test workflow to execute tests upon changes pushed to the main branch.
+
 ## [1.0.0] - 2025-12-31
 
 **Initial release of Go OpenAPI Validator** – a high-performance, framework-agnostic OpenAPI v3 validator for Go.
