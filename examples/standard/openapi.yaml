@@ -1,0 +1,30 @@
+openapi: 3.0.0
+info:
+  title: Basic API
+  description: This is a basic API using the standard library and go-openapi-validator.
+  version: 1.0.0
+paths:
+  /hello:
+    post:
+      summary: Say hello to the given name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string

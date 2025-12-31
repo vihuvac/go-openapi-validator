@@ -1,0 +1,63 @@
+openapi: 3.1.1
+info:
+  title: Health Check API
+  description: This is a health check API using gin-gonic and go-openapi-validator with manual route registration.
+  version: 1.0.0
+tags:
+  - name: health
+    description: Liveness and Readiness Probes inspired by Kubernetes
+    externalDocs:
+      description: Find out more
+      url: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes
+paths:
+  /health/liveness:
+    get:
+      tags:
+        - health
+      summary: Get the API liveness status
+      responses:
+        '200':
+          description: The API is live
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+              example:
+                message: Ok
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+              example:
+                message: Internal server error
+  /health/readiness:
+    get:
+      tags:
+        - health
+      summary: Get the API readiness status
+      responses:
+        200:
+          description: The API is ready to handle requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+              example:
+                message: Ok
+        500:
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIResponse"
+              example:
+                message: Internal server error
+components:
+  schemas:
+    APIResponse:
+      type: object
+      properties:
+        message:
+          type: string
