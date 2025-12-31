@@ -1,0 +1,70 @@
+name: "Create Release Tag"
+description: "Determine version from input or CHANGELOG.md and create/push Git tag"
+inputs:
+  version:
+    description: "Optional semver to release (e.g. 1.2.3). If omitted, topmost version in CHANGELOG.md is used."
+    required: false
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: "1.25.5"
+
+    - name: Determine version
+      id: ver
+      run: |
+        set -euo pipefail
+        provided_version="${{ inputs.version }}"
+        if [ -n "$provided_version" ]; then
+          semver="$provided_version"
+          echo "Using provided version: $semver"
+        else
+          ver_line=$(grep -E '^## \[v?[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | head -n1 || true)
+          if [ -z "$ver_line" ]; then
+            echo "No version found in CHANGELOG.md";
+            echo "skip=true" >> "$GITHUB_OUTPUT";
+            exit 0;
+          fi
+          semver=$(echo "$ver_line" | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')
+        fi
+        if [ -z "${semver:-}" ]; then
+          echo "Could not determine semver.";
+          echo "skip=true" >> "$GITHUB_OUTPUT";
+          exit 0;
+        fi
+        new_tag="v$semver"
+        echo "version=$semver" >> "$GITHUB_OUTPUT"
+        echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+      shell: bash
+
+    - name: Create and push tag if new
+      if: steps.ver.outputs.skip != 'true'
+      run: |
+        set -euo pipefail
+        git fetch --tags
+        latest_tag=$(git tag --sort=-v:refname | head -n1 || true)
+        echo "Latest tag: $latest_tag"
+        new_tag="${{ steps.ver.outputs.new_tag }}"
+        MODULE_PATH=$(go list -m)
+        # Check if version already published to Go proxy
+        if curl -fS "https://proxy.golang.org/${MODULE_PATH}/@v/${new_tag}.info" > /dev/null 2>&1; then
+          echo "Version ${new_tag} already published to proxy. Nothing to do.";
+          exit 0;
+        fi
+        if [ "$new_tag" = "$latest_tag" ]; then
+          echo "Tag $new_tag already exists locally. Nothing to do.";
+          exit 0;
+        fi
+        dry_run_input="${{ env.DRY_RUN }}"
+        if [ "${dry_run_input:-false}" = "true" ] || [ "${dry_run_input:-false}" = "True" ]; then
+          echo "Dry run enabled — would create and push tag: $new_tag"
+          exit 0
+        fi
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git tag -a "$new_tag" -m "Release $new_tag"
+        git push origin "$new_tag"
+      shell: bash
